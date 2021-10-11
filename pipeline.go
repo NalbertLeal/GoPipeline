@@ -6,7 +6,7 @@ type Pipeline struct {
 	out    chan *Data
 }
 
-func NewPipeline(producer Producer) *Pipeline {
+func FromProducer(producer Producer) *Pipeline {
 	pipelineInput := make(chan *Data)
 
 	go producer(pipelineInput)
@@ -18,9 +18,40 @@ func NewPipeline(producer Producer) *Pipeline {
 	}
 }
 
-// func FromIterator() (*Pipeline, error) {
-// 	return nil, nil
-// }
+func FromChannel(in chan interface{}) *Pipeline {
+	pipelineInput := make(chan *Data)
+	go fromChannelHelper(in, pipelineInput)
+
+	return &Pipeline{
+		[]Stage{},
+		pipelineInput,
+		nil,
+	}
+}
+
+func fromChannelHelper(in chan interface{}, pipelineInput chan *Data) {
+	for value := range in {
+		pipelineInput <- NewData(value, Processing)
+	}
+}
+
+func Just(values ...interface{}) *Pipeline {
+	pipelineInput := make(chan *Data)
+	go justHelper(values, pipelineInput)
+
+	return &Pipeline{
+		[]Stage{},
+		pipelineInput,
+		nil,
+	}
+}
+
+func justHelper(values []interface{}, pipelineInput chan *Data) {
+	for _, value := range values {
+		pipelineInput <- NewData(value, Processing)
+	}
+	pipelineInput <- NewData(nil, Completed)
+}
 
 func (p *Pipeline) Pipe(stage Stage) *Pipeline {
 	p.stages = append(p.stages, stage)
@@ -65,6 +96,10 @@ func (p *Pipeline) Block() ([]interface{}, error) {
 	return values, nil
 }
 
+func (p *Pipeline) Close() {
+	p.in <- NewData(nil, Completed)
+}
+
 func (p *Pipeline) chainStages() {
 	lastOut := p.in
 	for i := 0; i < len(p.stages); i++ {
@@ -88,14 +123,15 @@ func (p *Pipeline) runStage(in chan *Data, out chan *Data, stage Stage) {
 		} else if data.Status == PipelineError {
 			out <- data
 			close(in)
+			break
 		} else if data.Status == Completed {
 			out <- data
 			close(in)
+			break
 		}
 	}
 }
 
 func (p *Pipeline) closeInOut() {
-	close(p.in)
 	close(p.out)
 }

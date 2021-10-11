@@ -21,9 +21,20 @@ func add(v interface{}) (interface{}, error) {
 	return v.(int) + 1, nil
 }
 
+func onData(v interface{}) {
+	fmt.Println("Data: ", v.(int))
+}
+
+func onError(e error) {
+	fmt.Println("Error: ", e.Error())
+}
+
+func onComplete() {
+	fmt.Println("Completed")
+}
+
 func main() {
-	p := pipeline.NewPipeline(producer)
+	p := pipeline.FromProducer(producer)
 	p.Pipe(mult).Pipe(add)
-	values, _ := p.Block()
-	fmt.Println(values)
+	p.Subscribe(onData, onError, onComplete)
 }
